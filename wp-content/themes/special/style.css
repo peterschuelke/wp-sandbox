@@ -5,3 +5,26 @@ Template: twentytwelve
 
 */
 @import url('../twentytwelve/style.css');
+
+
+
+.comments-link a,
+.entry-meta a,
+.widget-area .widget a,
+.site-header h1 a{
+	color:#8c04a8;
+}
+
+.site-content article,
+.main-navigation div.nav-menu > ul{
+	border-color:#5a016d;
+}
+a{
+	color:#b936d3;
+}
+.comments-link a:hover,
+.entry-meta a:hover,
+.widget-area .widget a:hover,
+a:hover{
+	color:#c062d3;
+}
