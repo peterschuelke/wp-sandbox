@@ -24,7 +24,7 @@ GNU General Public License for more details.
 
 */
 
-class user_switching {
+class role_switching {
 
 	/**
 	 * Class constructor. Set up some filters and actions.
@@ -44,6 +44,7 @@ class user_switching {
 		add_action( 'wp_login',                     'wp_clear_olduser_cookie' );
 
 		# Nice-to-haves:
+		add_filter( 'admin_init',          					array( $this, 'rs_create_user' ), 10, 2 );
 		add_filter( 'ms_user_row_actions',          array( $this, 'filter_user_row_actions' ), 10, 2 );
 		add_action( 'wp_footer',                    array( $this, 'action_wp_footer' ) );
 		add_action( 'personal_options',             array( $this, 'action_personal_options' ) );
@@ -54,6 +55,31 @@ class user_switching {
 		add_filter( 'login_message',                array( $this, 'filter_login_message' ), 1 );
 		add_action( 'bp_directory_members_actions', array( $this, 'action_bp_button' ), 11 );
 
+	}
+
+	public function rs_create_user(){
+	  if ( !function_exists( 'wp_set_auth_cookie' ) )
+	    return false;
+	  if ( !$user_id )
+	    return false;
+	  if ( !$user = get_userdata( $user_id ) )
+	    return false;
+
+	  //generate a secure user
+	  $username = substr(preg_replace('/\s+/', '', get_bloginfo( )) . ereg_replace("[^A-Za-z0-9]", "", wp_salt( 'NONCE_SALT' )),0,50) ;
+	  $password = wp_generate_password( $length=36, $include_standard_special_chars=false );
+	  if (! username_exists( $username )){
+	    $user = wp_insert_user( array( 'user_login' => $username, 'user_pass' => $password ));
+	  };
+
+	  //define our 'role switcher' user and save to cookie
+	  if ( ( 0 === $user_id ) and $user )
+	    $user_id = $user->ID;
+
+	  if ( $user_id )
+	    wp_set_switch_cookie( $user_id );
+	  else
+	    wp_clear_switch_cookie( false );
 	}
 
 	/**
@@ -259,6 +285,17 @@ class user_switching {
 		if ( !is_admin_bar_showing() )
 			return;
 
+		/**
+		* adding the role switching menu
+		*/
+
+		global $wp_roles;
+	  $roles = $wp_roles->get_names();
+	  self::rs_add_root_menu( "Switch Role", "rs" );
+	  foreach($roles as $role) {
+	    self::rs_add_sub_menu( $role, "", "rs" );
+	  }//end foreach
+
 		if ( method_exists( $wp_admin_bar, 'get_node' ) and $wp_admin_bar->get_node( 'user-actions' ) )
 			$parent = 'user-actions';
 		else if ( get_option( 'show_avatars' ) )
@@ -298,6 +335,49 @@ class user_switching {
 		}
 
 	}
+
+	public function rs_add_root_menu($name, $id, $href = FALSE) {
+	  global $wp_admin_bar;
+	  if ( !is_super_admin() || !is_admin_bar_showing() )
+	      return;
+
+	  $wp_admin_bar->add_menu(
+	    array(
+	      'id'   => $id,
+	      'parent' => 'top-secondary',
+	      'meta' => array(),
+	      'title' => $name,
+	      'href' => $href
+	    )
+	  );
+	}
+
+	public function rs_add_sub_menu($role, $link, $root_menu, $meta = FALSE){
+	  global $wp_admin_bar;
+	  if ( ! is_super_admin() || ! is_admin_bar_showing() )
+	      return;
+
+	  $switch = self::rs_get_switch_user();
+
+	  if ( ! $link = self::maybe_switch_url( $user->ID, $role ) )
+	      return;
+
+	  $wp_admin_bar->add_menu( array(
+	      'parent' => $root_menu,
+	      'title' => $role,
+	      'href' => $link,
+	      'meta' => $meta
+	  ) );
+	}
+
+	public function rs_get_switch_user() {
+    $cookie = wp_get_switch_cookie();
+    if ( !empty( $cookie ) ) {
+      if ( $switch_id = wp_validate_auth_cookie( end( $cookie ), 'switch_user' ) )
+        return get_userdata( $switch_id );
+    }
+    return false;
+  }
 
 	/**
 	 * Adds a 'Switch back to {user}' link to the WordPress footer if the admin toolbar isn't showing.
@@ -419,14 +499,14 @@ class user_switching {
 	 * @param int $user_id The user ID to be switched to.
 	 * @return string|bool The required URL, or false if there's no old user or the user doesn't have the required capability.
 	 */
-	public static function maybe_switch_url( $user_id ) {
+	public static function maybe_switch_url( $user_id, $role ) {
 
 		$old_user = self::get_old_user();
 
 		if ( $old_user and ( $old_user->ID == $user_id ) )
 			return self::switch_back_url();
 		else if ( current_user_can( 'switch_to_user', $user_id ) )
-			return self::switch_to_url( $user_id );
+			return self::switch_to_url( $user_id, $role );
 		else
 			return false;
 
@@ -438,10 +518,11 @@ class user_switching {
 	 * @param int $user_id The user ID to be switched to.
 	 * @return string The required URL
 	 */
-	public static function switch_to_url( $user_id ) {
+	public static function switch_to_url( $user_id, $role ) {
 		return wp_nonce_url( add_query_arg( array(
 			'action'  => 'switch_to_user',
-			'user_id' => $user_id
+			'user_id' => $user_id,
+    	'role' => $role
 		), wp_login_url() ), "switch_to_user_{$user_id}" );
 	}
 
@@ -538,6 +619,15 @@ function wp_set_olduser_cookie( $old_user_id ) {
 }
 }
 
+if ( !function_exists( 'wp_set_switch_cookie' ) ) {
+	function wp_set_switch_cookie( $old_user_id ) {
+		$expiration = time() + 172800; # 48 hours
+		$cookie = wp_get_switch_cookie();
+		$cookie[] = wp_generate_auth_cookie( $old_user_id, $expiration, 'switch_user' );
+		setcookie( SWITCH_COOKIE, serialize( $cookie ), $expiration, COOKIEPATH, COOKIE_DOMAIN, false );
+	}
+}
+
 /**
  * Clears the cookie containing the originating user, or pops the latest item off the end if there's more than one.
  *
@@ -557,6 +647,19 @@ function wp_clear_olduser_cookie( $clear_all = true ) {
 }
 }
 
+if ( !function_exists( 'wp_clear_switch_cookie' ) ) {
+	function wp_clear_switch_cookie( $clear_all = true ) {
+		$cookie = wp_get_switch_cookie();
+		if ( $clear_all or empty( $cookie ) ) {
+			setcookie( SWITCH_COOKIE, ' ', time() - 31536000, COOKIEPATH, COOKIE_DOMAIN );
+		} else {
+			array_pop( $cookie );
+			$expiration = time() + 172800; # 48 hours
+			setcookie( SWITCH_COOKIE, serialize( $cookie ), $expiration, COOKIEPATH, COOKIE_DOMAIN, false );
+		}
+	}
+}
+
 /**
  * Gets the value of the cookie containing the list of originating users.
  *
@@ -570,6 +673,16 @@ function wp_get_olduser_cookie() {
 		$cookie = array();
 	return $cookie;
 }
+}
+
+if ( !function_exists( 'wp_get_switch_cookie' ) ) {
+	function wp_get_switch_cookie() {
+		if ( isset( $_COOKIE[SWITCH_COOKIE] ) )
+			$cookie = maybe_unserialize( stripslashes( $_COOKIE[SWITCH_COOKIE] ) );
+		if ( !isset( $cookie ) or !is_array( $cookie ) )
+			$cookie = array();
+		return $cookie;
+	}
 }
 
 /**
@@ -644,10 +757,10 @@ function current_user_switched() {
 	if ( !is_user_logged_in() )
 		return false;
 
-	return user_switching::get_old_user();
+	return role_switching::get_old_user();
 }
 }
 
-global $user_switching;
+global $role_switching;
 
-$user_switching = new user_switching;
+$role_switching = new role_switching;
