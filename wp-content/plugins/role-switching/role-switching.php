@@ -60,26 +60,27 @@ class role_switching {
 	public function rs_create_user(){
 	  if ( !function_exists( 'wp_set_auth_cookie' ) )
 	    return false;
-	  if ( !$user_id )
-	    return false;
-	  if ( !$user = get_userdata( $user_id ) )
-	    return false;
+
 
 	  //generate a secure user
 	  $username = substr(preg_replace('/\s+/', '', get_bloginfo( )) . ereg_replace("[^A-Za-z0-9]", "", wp_salt( 'NONCE_SALT' )),0,50) ;
 	  $password = wp_generate_password( $length=36, $include_standard_special_chars=false );
 	  if (! username_exists( $username )){
 	    $user = wp_insert_user( array( 'user_login' => $username, 'user_pass' => $password ));
+	  } else {
+	  	$user = get_userdatabylogin($username);
 	  };
 
 	  //define our 'role switcher' user and save to cookie
-	  if ( ( 0 === $user_id ) and $user )
-	    $user_id = $user->ID;
+	  if ( $user ) $user_id = $user->ID;
 
-	  if ( $user_id )
+	  if ( isset($user_id) ){
+
 	    wp_set_switch_cookie( $user_id );
-	  else
+	  }
+	  else{
 	    wp_clear_switch_cookie( false );
+	  }
 	}
 
 	/**
@@ -102,7 +103,8 @@ class role_switching {
 	 */
 	public function action_personal_options( WP_User $user ) {
 
-		if ( ! $link = self::maybe_switch_url( $user->ID ) )
+		$role = null;
+		if ( ! $link = self::maybe_switch_url( $user->ID, $role ) )
 			return;
 
 		?>
@@ -155,11 +157,12 @@ class role_switching {
 			# We're attempting to switch to another user:
 			case 'switch_to_user':
 				$user_id = absint( $_REQUEST['user_id'] );
+				$role = esc_html( $_REQUEST['role'] );
 
 				check_admin_referer( "switch_to_user_{$user_id}" );
 
 				# Switch user:
-				if ( switch_to_user( $user_id, self::remember() ) ) {
+				if ( switch_to_user( $user_id, $role, self::remember() ) ) {
 
 					# Redirect to the dashboard or the home URL depending on capabilities:
 					if ( $redirect_to )
@@ -359,7 +362,7 @@ class role_switching {
 
 	  $switch = self::rs_get_switch_user();
 
-	  if ( ! $link = self::maybe_switch_url( $user->ID, $role ) )
+	  if ( ! $link = self::maybe_switch_url( $switch->ID, $role ) )
 	      return;
 
 	  $wp_admin_bar->add_menu( array(
@@ -431,8 +434,8 @@ class role_switching {
 	 * @return array The actions to display for this user row
 	 */
 	public function filter_user_row_actions( array $actions, WP_User $user ) {
-
-		if ( ! $link = self::maybe_switch_url( $user->ID ) )
+		$role == null;
+		if ( ! $link = self::maybe_switch_url( $user->ID, $role ) )
 			return $actions;
 
 		$actions['switch_to_user'] = '<a href="' . $link . '">' . __( 'Switch&nbsp;To', 'user_switching' ) . '</a>';
@@ -694,13 +697,16 @@ if ( !function_exists( 'wp_get_switch_cookie' ) ) {
  * @return bool True on success, false on failure.
  */
 if ( !function_exists( 'switch_to_user' ) ) {
-function switch_to_user( $user_id, $remember = false, $old_user_id = 0 ) {
+function switch_to_user( $user_id, $role = null, $remember = false, $old_user_id = 0 ) {
 	if ( !function_exists( 'wp_set_auth_cookie' ) )
 		return false;
 	if ( !$user_id )
 		return false;
 	if ( !$user = get_userdata( $user_id ) )
 		return false;
+	var_dump($user_id);
+	var_dump($role);
+
 
 	$old_user = wp_get_current_user();
 
@@ -711,6 +717,9 @@ function switch_to_user( $user_id, $remember = false, $old_user_id = 0 ) {
 		wp_set_olduser_cookie( $old_user_id );
 	else
 		wp_clear_olduser_cookie( false );
+	if( $user_id !== 1 && $role !== false){
+		wp_update_user( array ( 'ID' => $user_id, 'role' => strtolower($role) ) ) ;
+	}
 
 	wp_clear_auth_cookie();
 	wp_set_auth_cookie( $user_id, $remember );
