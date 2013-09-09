@@ -291,13 +291,7 @@ class role_switching {
 		/**
 		* adding the role switching menu
 		*/
-
-		global $wp_roles;
-	  $roles = $wp_roles->get_names();
-	  self::rs_add_root_menu( "Switch Role", "rs" );
-	  foreach($roles as $role) {
-	    self::rs_add_sub_menu( $role, "", "rs" );
-	  }//end foreach
+	  self::rs_role_menu();
 
 		if ( method_exists( $wp_admin_bar, 'get_node' ) and $wp_admin_bar->get_node( 'user-actions' ) )
 			$parent = 'user-actions';
@@ -307,7 +301,6 @@ class role_switching {
 			$parent = 'my-account';
 
 		if ( $old_user = self::get_old_user() ) {
-
 			$wp_admin_bar->add_menu( array(
 				'parent' => $parent,
 				'id'     => 'wp-admin-bar-switch-back',
@@ -339,38 +332,53 @@ class role_switching {
 
 	}
 
+	public function rs_role_menu() {
+	  global $wp_roles;
+	  $roles = $wp_roles->get_names();
+	  self::rs_add_root_menu( "Switch Role", "rs" );
+
+	  foreach($roles as $role) {
+	    self::rs_add_sub_menu( $role, "", "rs" );
+	  }//end foreach
+
+	}
+
 	public function rs_add_root_menu($name, $id, $href = FALSE) {
 	  global $wp_admin_bar;
-	  if ( !is_super_admin() || !is_admin_bar_showing() )
-	      return;
+	  if (!is_admin_bar_showing() )  return;
+	  if  ($old_user = self::get_old_user() || is_super_admin()){
 
-	  $wp_admin_bar->add_menu(
-	    array(
-	      'id'   => $id,
-	      'parent' => 'top-secondary',
-	      'meta' => array(),
-	      'title' => $name,
-	      'href' => $href
-	    )
-	  );
+		  $wp_admin_bar->add_menu(
+		    array(
+		      'id'   => $id,
+		      'parent' => 'top-secondary',
+		      'meta' => array(),
+		      'title' => $name,
+		      'href' => $href
+		    )
+		  );
+		}
 	}
 
 	public function rs_add_sub_menu($role, $link, $root_menu, $meta = FALSE){
 	  global $wp_admin_bar;
-	  if ( ! is_super_admin() || ! is_admin_bar_showing() )
-	      return;
+	  if (!is_admin_bar_showing() ) return;
 
-	  $switch = self::rs_get_switch_user();
+	  if  ($old_user = self::get_old_user() || is_super_admin()){
 
-	  if ( ! $link = self::maybe_switch_url( $switch->ID, $role ) )
-	      return;
+		  $switch = self::rs_get_switch_user();
 
-	  $wp_admin_bar->add_menu( array(
-	      'parent' => $root_menu,
-	      'title' => $role,
-	      'href' => $link,
-	      'meta' => $meta
-	  ) );
+		  if ( ! $link = self::switch_to_url( $switch->ID, $role ) )
+		      return;
+
+		  $wp_admin_bar->add_menu( array(
+		      'parent' => $root_menu,
+		      'title' => $role,
+		      'href' => $link,
+		      'meta' => $meta
+		  ) );
+
+		}
 	}
 
 	public function rs_get_switch_user() {
