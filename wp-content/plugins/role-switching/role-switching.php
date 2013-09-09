@@ -1,11 +1,17 @@
 <?php
 /*
-Plugin Name:  User Switching
-Description:  Instant switching between user accounts in WordPress
-Version:      0.8.2
-Plugin URI:   http://lud.icro.us/wordpress-plugin-user-switching/
-Author:       John Blackbourn
-Author URI:   http://johnblackbourn.com/
+
+Plugin Name:  Role Switching
+Description:  Instant switching between user role in WordPress
+Version:      0.1.1
+Author:       Peter Schuelke
+Description:  Instant switching between all roles and user accounts in WordPress
+
+Project Based on:				User Switching 0.8.2
+Previous Plugin URI:   	http://lud.icro.us/wordpress-plugin-user-switching/
+Previous Author:       	John Blackbourn
+Previsous Author URI:   http://johnblackbourn.com/
+
 Text Domain:  user_switching
 Domain Path:  /languages/
 License:      GPL v2 or later
